@@ -1,0 +1,46 @@
+# Деплой за туннелем Cloudflare (белого IP пока нет).
+# Перед запуском: заполнить .env, создать туннель в дашборде Cloudflare и положить
+# токен в CLOUDFLARED_TUNNEL_TOKEN. Локальная БД уже развёрнута нативно — сервис db
+# нужен только при переезде на полностью контейнерный деплой.
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      AUTH_DSN: postgresql://stash_auth:${DB_PASSWORD}@db:5432/stash
+      APP_DSN: postgresql://stash_app:${DB_PASSWORD}@db:5432/stash
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOME}/stash-files:/data/files
+      - ${HOME}/stash-transcribe:/opt/stash-transcribe:ro
+      - ${HOME}/StashFrontend/apps/web/dist:/opt/frontend:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: stash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Свежая БД требует ручной инициализации: роли stash_auth/stash_app,
+    # ~/schema.sql (CREATE EXTENSION vector — от суперпользователя) и migrations/.
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARED_TUNNEL_TOKEN}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
