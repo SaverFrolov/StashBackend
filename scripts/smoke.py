@@ -18,6 +18,8 @@ FAILED = []
 
 def req(method, path, body=None, token=None, headers=None, raw=False):
     h = dict(headers or {})
+    # Cloudflare Browser Integrity Check blocks the default python-urllib UA.
+    h.setdefault("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) StashSmoke/1.0")
     if body is not None:
         h["Content-Type"] = "application/json"
     t = token if token is not None else TOKEN
