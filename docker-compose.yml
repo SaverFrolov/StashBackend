@@ -7,8 +7,7 @@ services:
     build: .
     env_file: .env
     environment:
-      AUTH_DSN: postgresql://stash_auth:${DB_PASSWORD}@db:5432/stash
-      APP_DSN: postgresql://stash_app:${DB_PASSWORD}@db:5432/stash
+      DATABASE_DSN: postgresql://stash_login:${DB_PASSWORD}@db:5432/stash
       OLLAMA_URL: http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"

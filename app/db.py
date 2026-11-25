@@ -20,10 +20,12 @@ async def _codecs(conn: asyncpg.Connection) -> None:
 
 async def init_pools() -> None:
     pools["auth"] = await asyncpg.create_pool(
-        cfg.auth_dsn, min_size=1, max_size=5, init=_codecs
+        cfg.dsn, min_size=1, max_size=5, init=_codecs,
+        server_settings={"role": "stash_auth"},
     )
     pools["app"] = await asyncpg.create_pool(
-        cfg.app_dsn, min_size=1, max_size=10, init=_codecs
+        cfg.dsn, min_size=1, max_size=10, init=_codecs,
+        server_settings={"role": "stash_app"},
     )
 
 

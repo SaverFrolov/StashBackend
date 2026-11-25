@@ -1,6 +1,8 @@
 import logging
 from uuid import UUID
 
+import asyncpg
+
 from ..db import app_conn, pools
 from . import ai
 from .extract import extract_item
@@ -36,14 +38,17 @@ async def _embed(conn, item_id, user_id, text: str) -> None:
         # Extraction stays ok; only semantic search degrades for this item.
         logger.warning("Embedding failed for item %s", item_id, exc_info=True)
         return
-    await conn.executemany(
-        "INSERT INTO item_chunks (item_id, user_id, chunk_no, content, embedding) "
-        "VALUES ($1, $2, $3, $4, $5::vector)",
-        [
-            (item_id, user_id, i, c, str(v))
-            for i, (c, v) in enumerate(zip(chunks, vecs))
-        ],
-    )
+    try:
+        await conn.executemany(
+            "INSERT INTO item_chunks (item_id, user_id, chunk_no, content, embedding) "
+            "VALUES ($1, $2, $3, $4, $5::vector)",
+            [
+                (item_id, user_id, i, c, str(v))
+                for i, (c, v) in enumerate(zip(chunks, vecs))
+            ],
+        )
+    except asyncpg.ForeignKeyViolationError:
+        pass  # item deleted while embedding
 
 
 async def _annotate(conn, item_id, user_id, text: str) -> None:
@@ -130,6 +135,7 @@ async def process_job(item_id: UUID, user_id: UUID, steps: tuple) -> None:
                 return
             if result is None:
                 await _step(conn, item_id, "extract", "skipped", finished=True)
+                await _embed(conn, item_id, user_id, text)
             else:
                 new_text, lang, title = result
                 await conn.execute(
@@ -146,6 +152,8 @@ async def process_job(item_id: UUID, user_id: UUID, steps: tuple) -> None:
                 text = new_text
                 await _embed(conn, item_id, user_id, text)
         if "annotate" in steps:
+            if await conn.fetchval("SELECT 1 FROM items WHERE id = $1", item_id) is None:
+                return  # item deleted while processing
             await _annotate(conn, item_id, user_id, text)
 
 

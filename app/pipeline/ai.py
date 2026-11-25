@@ -99,14 +99,31 @@ async def test_connection(settings) -> dict:
     base = settings["base_url"].rstrip("/")
     if not base:
         return {"ok": False, "message": "Base URL is empty"}
+    if settings["provider"] == "ollama":
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.get(base + "/api/tags")
+            if r.status_code == 200:
+                return {"ok": True, "message": f"Connected to {settings['model']}"}
+            return {"ok": False, "message": f"HTTP {r.status_code}: {r.text[:200]}"}
+        except httpx.HTTPError as e:
+            return {"ok": False, "message": str(e)[:200]}
+    # /models can be public — validate the key with a 1-token chat completion.
     headers = {}
     key = _key(settings)
     if key:
         headers["Authorization"] = f"Bearer {key}"
-    url = base + "/api/tags" if settings["provider"] == "ollama" else base + "/models"
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(url, headers=headers)
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                _chat_url(settings["provider"], base),
+                json={
+                    "model": settings["model"],
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 1,
+                },
+                headers=headers,
+            )
         if r.status_code == 200:
             return {"ok": True, "message": f"Connected to {settings['model']}"}
         return {"ok": False, "message": f"HTTP {r.status_code}: {r.text[:200]}"}

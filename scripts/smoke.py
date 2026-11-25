@@ -28,10 +28,11 @@ def req(method, path, body=None, token=None, headers=None, raw=False):
     try:
         with urllib.request.urlopen(r, timeout=60) as resp:
             content = resp.read()
+            headers = {k.lower(): v for k, v in resp.headers.items()}
             if raw:
-                return resp.status, content, dict(resp.headers)
+                return resp.status, content, headers
             parsed = json.loads(content) if content and resp.status != 204 else None
-            return resp.status, parsed, dict(resp.headers)
+            return resp.status, parsed, headers
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:300], {}
 
@@ -103,7 +104,7 @@ def main():
     s, b, _ = req("GET", f"/items/{note['id']}")
     check("rename propagated", s == 200 and b["userTags"] == ["срочное"])
 
-    s, b, _ = req("POST", "/search?q=заметка&mode=keywords", {"mode": "keywords"})
+    s, b, _ = req("POST", "/search?q=" + urllib.parse.quote("заметка") + "&mode=keywords", {"mode": "keywords"})
     check("keyword search", s == 200 and isinstance(b, list) and any(r["item"]["id"] == note["id"] for r in b), str(b)[:200])
     s, b, _ = req("GET", "/search/recent")
     check("recent queries", s == 200 and "заметка" in b, str(b))
@@ -118,7 +119,7 @@ def main():
     check("export json", s == 200 and "items" in b and len(b["items"]) == 2, str(b)[:200])
     s, b, h = req("POST", "/export", {"scope": "collection", "collectionId": col["id"], "format": "markdown",
                                       "includeOriginals": True, "includeExtracted": True, "includeAi": True, "includeComments": True}, raw=True)
-    check("export markdown", s == 200 and b.startswith(b"# ") and "text/markdown" in h.get("Content-Type", ""), str(b)[:100])
+    check("export markdown", s == 200 and b.startswith(b"# ") and "text/markdown" in h.get("content-type", ""), str(b)[:100])
     s, b, _ = req("GET", "/usage")
     check("usage", s == 200 and b["bytesUsed"] == 0, str(b))
 
@@ -146,7 +147,7 @@ def main():
     s, b, h = req("GET", path, raw=True)
     check("signed file download", s == 200 and b == pdf, f"{s} {b[:40]!r}")
     s, b, h = req("GET", path, headers={"Range": "bytes=0-3"}, raw=True)
-    check("range request", s == 206 and b == pdf[:4] and h.get("Content-Range", "").startswith("bytes 0-3/"), f"{s} {b!r}")
+    check("range request", s == 206 and b == pdf[:4] and h.get("content-range", "").startswith("bytes 0-3/"), f"{s} {b!r}")
     s, _, _ = req("GET", path.replace("sig=", "sig=0"), raw=True)
     check("tampered signature -> 403", s == 403)
     s, b, _ = req("GET", "/usage")

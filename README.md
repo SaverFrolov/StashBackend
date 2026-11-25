@@ -27,10 +27,10 @@ cp .env.example .env   # заполнить DSN и SECRET_KEY
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
-Перед первым запуском применить миграцию (от роли `stash`):
+Перед первым запуском применить миграцию (от роли-владельца `stash`):
 
 ```bash
-psql "$APP_DSN" -f migrations/001_ai_original_annotation.sql
+psql "postgresql://stash:PASSWORD@localhost:5432/stash" -f migrations/001_ai_original_annotation.sql
 ```
 
 Тесты: `.venv/bin/python -m pytest tests/ -q`
@@ -51,7 +51,8 @@ psql "$APP_DSN" -f migrations/001_ai_original_annotation.sql
 - `app/routers/` — эндпоинты (auth, items, files, search, collections, tags,
   settings, tokens, export).
 - `app/pipeline/` — очередь и воркер обработки, извлечение текста, ИИ.
-- `app/db.py` — пулы asyncpg: `stash_auth` (вход) и `stash_app` (RLS-контекст).
+- `app/db.py` — пулы asyncpg: вход через `stash_login`, роли `stash_auth` (вход)
+  и `stash_app` (RLS-контекст) переключаются при подключении.
 - `app/security.py` — PBKDF2-пароли, Fernet-шифрование ключей, подпись ссылок.
 - `migrations/` — аддитивные миграции к развёрнутой `~/schema.sql`.
 

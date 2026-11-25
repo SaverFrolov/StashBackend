@@ -4,11 +4,10 @@ from pathlib import Path
 
 class Config:
     def __init__(self) -> None:
-        self.auth_dsn = os.environ.get(
-            "AUTH_DSN", "postgresql://stash_auth@localhost:5432/stash"
-        )
-        self.app_dsn = os.environ.get(
-            "APP_DSN", "postgresql://stash_app@localhost:5432/stash"
+        # Login role is a member of the NOLOGIN groups stash_auth / stash_app;
+        # each pool switches to its group via the startup `role` parameter.
+        self.dsn = os.environ.get(
+            "DATABASE_DSN", "postgresql://stash_login@localhost:5432/stash"
         )
         self.secret_key = os.environ.get("SECRET_KEY", "dev-insecure-secret")
         self.files_dir = Path(
