@@ -12,6 +12,7 @@ from .config import cfg
 from .db import close_pools, init_pools
 from .pipeline import queue
 from .routers import (
+    admin,
     auth,
     collections,
     export,
@@ -45,6 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(items.router)
 app.include_router(files.router)

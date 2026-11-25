@@ -36,6 +36,17 @@ async def current_user(authorization: Annotated[str | None, Header()] = None) ->
 CurrentUser = Annotated[dict, Depends(current_user)]
 
 
+async def admin_user(user: CurrentUser) -> dict:
+    from .config import cfg
+
+    if not cfg.admin_email or user["email"].lower() != cfg.admin_email:
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
+AdminUser = Annotated[dict, Depends(admin_user)]
+
+
 async def app_db(user: CurrentUser):
     async with app_conn(user["id"]) as conn:
         yield conn

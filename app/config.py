@@ -29,6 +29,7 @@ class Config:
             "TRANSCRIBE_SCRIPT", str(Path.home() / "stash-transcribe/transcribe.py")
         )
         self.cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+        self.admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
         # Defaults confirmed with the user on 2026-11-23 (airouter proxy).
         self.default_ai = {
             "provider": "openai",
