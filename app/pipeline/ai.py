@@ -64,9 +64,9 @@ def _key(settings) -> str | None:
     return decrypt_api_key(enc) if enc else None
 
 
-async def annotate(settings, text: str) -> dict:
+async def annotate(settings, text: str, key: str | None = None) -> dict:
     headers = {}
-    key = _key(settings)
+    key = key or _key(settings)
     if key:
         headers["Authorization"] = f"Bearer {key}"
     payload = {

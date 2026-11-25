@@ -3,6 +3,7 @@ from uuid import UUID
 
 import asyncpg
 
+from ..config import cfg
 from ..db import app_conn, pools
 from . import ai
 from .extract import extract_item
@@ -61,9 +62,17 @@ async def _annotate(conn, item_id, user_id, text: str) -> None:
     settings = await conn.fetchrow(
         "SELECT * FROM ai_settings WHERE user_id = $1", user_id
     )
-    if settings is None or (
-        settings["provider"] == "openai" and not settings["api_key_enc"]
-    ):
+    key_override = None
+    if settings is not None and settings["provider"] == "openai" and not settings["api_key_enc"]:
+        if not cfg.default_ai_key:
+            await _step(conn, item_id, "annotate", "skipped", finished=True)
+            await conn.execute(
+                "UPDATE items SET status = 'partial', updated_at = now() WHERE id = $1",
+                item_id,
+            )
+            return
+        key_override = cfg.default_ai_key
+    if settings is None:
         await _step(conn, item_id, "annotate", "skipped", finished=True)
         await conn.execute(
             "UPDATE items SET status = 'partial', updated_at = now() WHERE id = $1",
@@ -76,7 +85,7 @@ async def _annotate(conn, item_id, user_id, text: str) -> None:
     )
     await _step(conn, item_id, "annotate", "running", started=True)
     try:
-        result = await ai.annotate(settings, text)
+        result = await ai.annotate(settings, text, key=key_override)
     except Exception as e:
         msg = (str(e) or type(e).__name__)[:2000]
         logger.warning("Annotation failed for item %s: %s", item_id, msg)

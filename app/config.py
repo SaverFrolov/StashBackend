@@ -30,6 +30,8 @@ class Config:
         )
         self.cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
         self.admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+        # Owner-funded fallback so users without their own key still get annotations.
+        self.default_ai_key = os.environ.get("DEFAULT_AI_API_KEY", "").strip()
         # Defaults confirmed with the user on 2026-11-23 (airouter proxy).
         self.default_ai = {
             "provider": "openai",

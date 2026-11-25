@@ -45,7 +45,12 @@ async def _create_session(conn, user_id) -> dict:
 def _session(token: str, user) -> dict:
     return {
         "token": token,
-        "user": {"id": str(user["id"]), "name": user["name"], "email": user["email"]},
+        "user": {
+            "id": str(user["id"]),
+            "name": user["name"],
+            "email": user["email"],
+            "isAdmin": bool(cfg.admin_email) and user["email"].lower() == cfg.admin_email,
+        },
     }
 
 
