@@ -1,7 +1,30 @@
+import logging
+
 import pytest
 
+from app.main import _FileSignatureFilter
 from app.pipeline.extract import check_public_url
 from app.ratelimit import RateLimiter
+
+
+def test_access_log_hides_file_signatures():
+    f = _FileSignatureFilter()
+    rec = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "", 0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("1.2.3.4", "GET", "/files/abc?u=x&exp=1&sig=deadbeef", "1.1", 200),
+        None,
+    )
+    assert f.filter(rec)
+    assert rec.args[2] == "/files/abc?<signed>"
+    other = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "", 0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("1.2.3.4", "GET", "/items?limit=20", "1.1", 200),
+        None,
+    )
+    f.filter(other)
+    assert other.args[2] == "/items?limit=20"
 
 
 @pytest.mark.parametrize(

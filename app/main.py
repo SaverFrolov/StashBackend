@@ -27,6 +27,22 @@ from .routers import (
 logging.basicConfig(level=logging.INFO)
 
 
+class _FileSignatureFilter(logging.Filter):
+    """Signed /files/ URLs grant 24h access — keep their signatures out of access logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args and len(record.args) >= 3:
+            args = list(record.args)
+            path = args[2]
+            if isinstance(path, str) and path.startswith("/files/"):
+                args[2] = path.split("?", 1)[0] + "?<signed>"
+                record.args = tuple(args)
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_FileSignatureFilter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_pools()
