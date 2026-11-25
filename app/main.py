@@ -3,9 +3,9 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import cfg
@@ -38,6 +38,21 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Stash API", lifespan=lifespan)
+
+MAX_BODY_BYTES = 3 * 1024**3  # ~2 GB video as base64 JSON plus overhead
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > MAX_BODY_BYTES:
+                return JSONResponse({"detail": "Payload too large"}, status_code=413)
+        except ValueError:
+            return JSONResponse({"detail": "Invalid Content-Length"}, status_code=400)
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

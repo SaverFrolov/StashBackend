@@ -2,11 +2,12 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import asyncpg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..config import cfg
 from ..db import app_conn, pools
+from ..ratelimit import client_ip, signin_limiter, signup_limiter
 from ..security import hash_password, new_token, token_hash, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -49,7 +50,9 @@ def _session(token: str, user) -> dict:
 
 
 @router.post("/signup")
-async def signup(body: SignUpIn):
+async def signup(request: Request, body: SignUpIn):
+    if not signup_limiter.allow(client_ip(request)):
+        raise HTTPException(429, "Too many signups, try later")
     if not EMAIL_RE.match(body.email):
         raise HTTPException(422, "Invalid email")
     async with pools["auth"].acquire() as conn:
@@ -77,7 +80,9 @@ async def signup(body: SignUpIn):
 
 
 @router.post("/signin")
-async def signin(body: SignInIn):
+async def signin(request: Request, body: SignInIn):
+    if not signin_limiter.allow(f"{client_ip(request)}:{body.email.strip().lower()}"):
+        raise HTTPException(429, "Too many attempts, try later")
     async with pools["auth"].acquire() as conn:
         user = await conn.fetchrow(
             "SELECT id, name, email, password_hash FROM users WHERE email = $1",

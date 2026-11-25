@@ -18,6 +18,9 @@ from ..pipeline import queue
 
 router = APIRouter(prefix="/items", tags=["items"])
 
+# Base64 uploads live in RAM; cap concurrent decodes so parallel huge files cannot OOM the box.
+_upload_slots = asyncio.Semaphore(2)
+
 ATTENTION = ("partial", "extraction_failed", "ai_failed")
 URL_RE = re.compile(r"https?://[^\s]+")
 
@@ -192,33 +195,35 @@ async def _save_upload(conn, user, payload: FilePayload, type_: str, comment, co
     if not payload.uri.startswith("data:"):
         raise HTTPException(422, "Only data-URL uploads are supported")
     _, _, b64 = payload.uri.partition(",")
-    try:
-        # shortcut: whole file lives in RAM (frontend sends base64 JSON); add a multipart endpoint when multi-GB uploads become real
-        data = await asyncio.to_thread(base64.b64decode, b64, validate=False)
-    except (binascii.Error, ValueError):
-        raise HTTPException(422, "Invalid file data")
     name = Path(payload.name).name
     if name in ("", ".", ".."):
         raise HTTPException(422, "Invalid file name")
     cols = await _owned_collections(conn, collection_ids)
-    row = await _insert(
-        conn,
-        user["id"],
-        type_,
-        payload.name,
-        source={"name": payload.name} if type_ != "audio" else None,
-        file_name=name,
-        file_size=len(data),
-        file_mime=payload.mimeType or None,
-        user_comment=comment,
-    )
-    dest = cfg.files_dir / str(user["id"]) / str(row["id"]) / name
-    try:
-        await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
-        await asyncio.to_thread(dest.write_bytes, data)
-    except OSError:
-        await conn.execute("DELETE FROM items WHERE id = $1", row["id"])
-        raise HTTPException(507, "Could not store the file")
+    # Slot covers decode AND disk write: the decoded buffer lives until written.
+    async with _upload_slots:
+        try:
+            # shortcut: whole file lives in RAM (frontend sends base64 JSON); add a multipart endpoint when multi-GB uploads become real
+            data = await asyncio.to_thread(base64.b64decode, b64, validate=False)
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, "Invalid file data")
+        row = await _insert(
+            conn,
+            user["id"],
+            type_,
+            payload.name,
+            source={"name": payload.name} if type_ != "audio" else None,
+            file_name=name,
+            file_size=len(data),
+            file_mime=payload.mimeType or None,
+            user_comment=comment,
+        )
+        dest = cfg.files_dir / str(user["id"]) / str(row["id"]) / name
+        try:
+            await asyncio.to_thread(dest.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(dest.write_bytes, data)
+        except OSError:
+            await conn.execute("DELETE FROM items WHERE id = $1", row["id"])
+            raise HTTPException(507, "Could not store the file")
     await conn.execute(
         "UPDATE items SET file_path = $1 WHERE id = $2", str(dest), row["id"]
     )

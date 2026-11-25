@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ..config import cfg
 from ..deps import AppDb, CurrentUser
 from ..pipeline import ai
-from ..security import encrypt_api_key, hash_password
+from ..security import encrypt_api_key, hash_password, verify_password
 
 router = APIRouter(tags=["settings"])
 
@@ -23,6 +23,7 @@ class AiSettingsIn(BaseModel):
 class AccountPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     password: str | None = Field(default=None, min_length=8, max_length=200)
+    currentPassword: str | None = Field(default=None, max_length=200)
 
 
 def _dto(row) -> dict:
@@ -91,6 +92,13 @@ async def update_account(body: AccountPatch, conn: AppDb, user: CurrentUser):
     if body.name is not None:
         updates["name"] = body.name.strip()
     if body.password is not None:
+        row = await conn.fetchrow(
+            "SELECT password_hash FROM users WHERE id = $1", user["id"]
+        )
+        if not body.currentPassword or not verify_password(
+            body.currentPassword, row["password_hash"]
+        ):
+            raise HTTPException(403, "Current password is wrong")
         updates["password_hash"] = hash_password(body.password)
     if updates:
         sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))

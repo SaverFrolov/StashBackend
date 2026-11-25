@@ -1,7 +1,10 @@
 import asyncio
+import ipaddress
 import json
+import socket
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -11,14 +14,40 @@ from ..config import cfg
 
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 UA = {"User-Agent": "Mozilla/5.0 (compatible; StashBot/1.0)"}
+MAX_REDIRECTS = 5
+
+
+def check_public_url(url: str) -> None:
+    """SSRF guard: reject non-http(s) and any host resolving to non-global IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("Unsupported URL scheme")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError("Cannot resolve host")
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if not addr.is_global:
+            raise ValueError("Internal addresses are not allowed")
 
 
 async def extract_link(url: str) -> tuple[str, str | None, str | None]:
+    # shortcut: check-then-fetch leaves a DNS-rebinding window; pin the resolved IP via a custom transport if this surface grows
     async with httpx.AsyncClient(
-        timeout=30, follow_redirects=True, headers=UA
+        timeout=30, follow_redirects=False, headers=UA
     ) as client:
-        r = await client.get(url)
-        r.raise_for_status()
+        for _ in range(MAX_REDIRECTS + 1):
+            await asyncio.to_thread(check_public_url, url)
+            r = await client.get(url)
+            if r.is_redirect and r.headers.get("location"):
+                url = str(r.url.join(r.headers["location"]))
+                continue
+            r.raise_for_status()
+            break
+        else:
+            raise ValueError("Too many redirects")
     if "html" not in r.headers.get("content-type", ""):
         return r.text[:2_000_000], None, None
     soup = BeautifulSoup(r.text, "html.parser")
