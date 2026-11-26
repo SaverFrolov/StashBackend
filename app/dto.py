@@ -62,6 +62,31 @@ def item_dto(row, user_tags: list[str], collection_ids: list[str], steps: list, 
         }
     elif row["original_text"] is not None:
         original["text"] = row["original_text"]
+    video_meta = row.get("video_meta")
+    video = None
+    if video_meta:
+        video = _clean(
+            {
+                "platform": video_meta.get("platform"),
+                "videoId": video_meta.get("video_id"),
+                "title": video_meta.get("title"),
+                "channel": video_meta.get("channel"),
+                "durationSec": video_meta.get("duration_sec"),
+                "sourceUrl": video_meta.get("source_url"),
+            }
+        )
+    stage = row.get("extract_stage")
+    progress = row.get("extract_progress") or {}
+    video_progress = (
+        _clean({"stage": stage, "current": progress.get("current"),
+                "total": progress.get("total"), "percent": progress.get("percent")})
+        if stage else None
+    )
+    error_code = row.get("extract_error_code")
+    video_error = (
+        {"code": error_code, "message": row.get("extracted_error") or ""}
+        if error_code else None
+    )
     return _clean(
         {
             "id": str(row["id"]),
@@ -71,6 +96,9 @@ def item_dto(row, user_tags: list[str], collection_ids: list[str], steps: list, 
             "lang": row["lang"],
             "capturedAt": iso(row["captured_at"]),
             "source": row["source"] or {},
+            "video": video,
+            "videoProgress": video_progress,
+            "videoError": video_error,
             "original": original,
             "extracted": _clean(
                 {"text": row["extracted_text"], "error": row["extracted_error"]}

@@ -32,6 +32,23 @@ class Config:
         self.admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
         # Owner-funded fallback so users without their own key still get annotations.
         self.default_ai_key = os.environ.get("DEFAULT_AI_API_KEY", "").strip()
+        # Video-by-link transcription (VK/Rutube). Off until the operator checklist passes.
+        self.video_links_enabled = os.environ.get("VIDEO_LINKS_ENABLED", "false").lower() == "true"
+        self.video_platforms = [
+            p.strip() for p in os.environ.get("VIDEO_PLATFORMS", "vk,rutube").split(",") if p.strip()
+        ]
+        self.video_allow_subtitles = os.environ.get("VIDEO_ALLOW_SUBTITLES", "true").lower() == "true"
+        self.video_allow_audio_download = os.environ.get("VIDEO_ALLOW_AUDIO_DOWNLOAD", "true").lower() == "true"
+        self.video_tmp_dir = Path(os.environ.get("VIDEO_TMP_DIR", str(Path.home() / "stash-video-tmp")))
+        self.video_concurrency = int(os.environ.get("VIDEO_CONCURRENCY", "1"))
+        self.video_whisper_threads = int(os.environ.get("VIDEO_WHISPER_THREADS", "8"))
+        self.video_nice = int(os.environ.get("VIDEO_NICE", "10"))
+        self.video_min_free_disk_mb = int(os.environ.get("VIDEO_MIN_FREE_DISK_MB", "2048"))
+        # 0 = unlimited (owner decision: no duration limits by default)
+        self.video_max_duration_min = int(os.environ.get("VIDEO_MAX_DURATION_MIN", "0"))
+        self.video_daily_minutes_per_user = int(os.environ.get("VIDEO_DAILY_MINUTES_PER_USER", "0"))
+        self.ytdlp_bin = os.environ.get("YTDLP_BIN", "yt-dlp")
+        self.ffmpeg_bin = os.environ.get("FFMPEG_BIN", "ffmpeg")
         # Defaults confirmed with the user on 2026-11-23 (airouter proxy).
         self.default_ai = {
             "provider": "openai",

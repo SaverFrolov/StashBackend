@@ -1,6 +1,7 @@
 import shutil
 from typing import Literal
 
+import asyncpg
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,8 @@ class AiSettingsIn(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     apiKey: str | None = Field(default=None, max_length=500)
     autoProcess: bool | None = None
+    transcribeVideoLinks: bool | None = None
+    transcribeLanguage: Literal["auto", "ru", "en"] | None = None
 
 
 class AccountPatch(BaseModel):
@@ -33,6 +36,8 @@ def _dto(row) -> dict:
         "model": row["model"],
         "apiKeySet": row["api_key_enc"] is not None,
         "autoProcess": row["auto_process"],
+        "transcribeVideoLinks": row.get("transcribe_video_links", True),
+        "transcribeLanguage": row.get("transcribe_language", "auto"),
     }
 
 
@@ -69,15 +74,22 @@ async def save_ai_settings(body: AiSettingsIn, conn: AppDb, user: CurrentUser):
         updates["model"] = body.model.strip()
     if body.autoProcess is not None:
         updates["auto_process"] = body.autoProcess
+    if body.transcribeVideoLinks is not None:
+        updates["transcribe_video_links"] = body.transcribeVideoLinks
+    if body.transcribeLanguage is not None:
+        updates["transcribe_language"] = body.transcribeLanguage
     if body.apiKey:
         updates["api_key_enc"] = encrypt_api_key(body.apiKey)
     if updates:
         sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))
-        await conn.execute(
-            f"UPDATE ai_settings SET {sets}, updated_at = now() WHERE user_id = $1",
-            user["id"],
-            *updates.values(),
-        )
+        try:
+            await conn.execute(
+                f"UPDATE ai_settings SET {sets}, updated_at = now() WHERE user_id = $1",
+                user["id"],
+                *updates.values(),
+            )
+        except asyncpg.UndefinedColumnError:
+            raise HTTPException(409, "Apply migration 003_video_transcripts.sql first")
     return _dto(await _get(conn, user["id"]))
 
 

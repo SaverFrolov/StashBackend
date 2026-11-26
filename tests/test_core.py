@@ -167,6 +167,35 @@ def test_item_dto_file_url():
     )
 
 
+def test_item_dto_video_fields_additive():
+    row = _row(
+        type="link",
+        video_meta={"platform": "rutube", "video_id": "abc", "title": "Лекция",
+                    "channel": "Канал", "duration_sec": 1415, "source_url": "https://rutube.ru/video/abc/"},
+        extract_stage="transcribing",
+        extract_progress={"current": 3, "total": 8, "percent": 37},
+        extract_error_code=None,
+    )
+    dto = item_dto(row, [], [], [], "")
+    assert dto["video"]["platform"] == "rutube"
+    assert dto["video"]["durationSec"] == 1415
+    assert dto["videoProgress"] == {"stage": "transcribing", "current": 3, "total": 8, "percent": 37}
+    assert "videoError" not in dto
+    plain = item_dto(_row(), [], [], [], "")
+    assert "video" not in plain and "videoProgress" not in plain and "videoError" not in plain
+
+
+def test_video_config_defaults():
+    from app.config import Config
+
+    c = Config()
+    assert c.video_links_enabled is False
+    assert c.video_platforms == ["vk", "rutube"]
+    assert c.video_concurrency == 1
+    assert c.video_max_duration_min == 0
+    assert c.video_daily_minutes_per_user == 0
+
+
 def test_export_strip_and_markdown():
     dto = item_dto(_row(user_comment="комментарий"), [], [], [], "")
     opts = ExportOptions(

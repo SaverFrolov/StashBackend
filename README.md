@@ -33,6 +33,14 @@ cp .env.example .env   # заполнить DSN и SECRET_KEY
 psql "postgresql://stash:PASSWORD@localhost:5432/stash" -f migrations/001_ai_original_annotation.sql
 ```
 
+Миграции применяются оператором вручную (аддитивные, идемпотентные):
+
+- `002_image_type.sql` — тип `image` + поиск по имени файла;
+- `003_video_transcripts.sql` — транскрипты видео по ссылке, метаданные,
+  подстатус извлечения, настройки пользователя. Нужна ДО включения
+  `VIDEO_LINKS_ENABLED=true`; откат: `003_rollback.sql`. Без неё бэкенд
+  работает как раньше (видеофункция выключена).
+
 Тесты: `.venv/bin/python -m pytest tests/ -q`
 
 ## Деплой на stashapp.ru (без белого IP)

@@ -3,6 +3,8 @@ import base64
 import binascii
 import re
 import shutil
+
+import asyncpg
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -471,6 +473,38 @@ async def retry_extraction(request: Request, item_id: str, conn: AppDb, user: Cu
     await _start_processing(conn, user["id"], iid)
     row = await conn.fetchrow("SELECT * FROM items WHERE id = $1", iid)
     return await one_item_dto(conn, row, file_base(request))
+
+
+@router.get("/{item_id}/transcript")
+async def get_transcript(
+    item_id: str, conn: AppDb, offset: int = 0, limit: int = 200
+):
+    iid = parse_uuid(item_id)
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
+    if await conn.fetchval("SELECT 1 FROM items WHERE id = $1", iid) is None:
+        raise HTTPException(404, "Item not found")
+    try:
+        rows = await conn.fetch(
+            "SELECT source, language, status, model, duration_sec, segments, chunk_no "
+            "FROM video_transcripts WHERE item_id = $1 ORDER BY chunk_no",
+            iid,
+        )
+    except asyncpg.UndefinedTableError:
+        raise HTTPException(404, "Transcript not available")
+    if not rows:
+        raise HTTPException(404, "Transcript not found")
+    segments = [s for r in rows for s in r["segments"]]
+    return {
+        "source": rows[0]["source"],
+        "language": rows[0]["language"],
+        "status": "done" if all(r["status"] == "done" for r in rows) else "partial",
+        "model": rows[0]["model"],
+        "durationSec": rows[0]["duration_sec"],
+        "total": len(segments),
+        "offset": offset,
+        "segments": segments[offset : offset + limit],
+    }
 
 
 @router.get("/{item_id}/related")
