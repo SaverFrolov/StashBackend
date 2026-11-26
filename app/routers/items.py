@@ -81,6 +81,11 @@ def type_from_mime(mime: str, name: str) -> str:
         return "audio"
     if mime.startswith("video/"):
         return "video"
+    # SVG excluded on purpose: inline SVG can carry scripts in the site origin.
+    if mime in ("image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/avif"):
+        return "image"
+    if not mime and re.search(r"\.(jpe?g|png|gif|webp|bmp|avif)$", n):
+        return "image"
     if mime in (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.ms-excel",
@@ -249,7 +254,7 @@ async def list_items(
         params.append(list(ATTENTION))
     elif filter == "file":
         where.append(f"type = ANY(${len(params) + 1}::text[])")
-        params.append(["pdf", "docx", "xlsx", "video"])
+        params.append(["pdf", "docx", "xlsx", "video", "image"])
     elif filter in ("pdf", "docx"):
         where.append(f"type = ANY(${len(params) + 1}::text[])")
         params.append(["pdf", "docx"])

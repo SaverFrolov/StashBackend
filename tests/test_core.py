@@ -78,6 +78,24 @@ def test_type_from_mime():
     )
 
 
+def test_type_from_mime_image():
+    assert type_from_mime("image/png", "a.png") == "image"
+    assert type_from_mime("image/jpeg", "a.jpg") == "image"
+    assert type_from_mime("", "photo.JPEG") == "image"
+    assert type_from_mime("", "pic.webp") == "image"
+    # SVG must not become an inline-rendered image type
+    assert type_from_mime("image/svg+xml", "a.svg") != "image"
+
+
+def test_image_skips_extraction():
+    import asyncio
+
+    from app.pipeline.extract import extract_item
+
+    row = {"type": "image", "file_path": "/tmp/whatever.png"}
+    assert asyncio.run(extract_item(row)) is None
+
+
 def test_guess_lang_and_title():
     assert guess_lang("привет мир") == "ru"
     assert guess_lang("hello world") == "en"
