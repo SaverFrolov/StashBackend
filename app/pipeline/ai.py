@@ -129,3 +129,20 @@ async def test_connection(settings) -> dict:
         return {"ok": False, "message": f"HTTP {r.status_code}: {r.text[:200]}"}
     except httpx.HTTPError as e:
         return {"ok": False, "message": str(e)[:200]}
+
+
+def resolve_key(settings) -> str | None:
+    """Свой ключ пользователя, иначе owner-funded fallback — как в воркере."""
+    if settings is None:
+        return None
+    if settings["provider"] == "openai" and not settings["api_key_enc"]:
+        return cfg.default_ai_key or None
+    return _key(settings)
+
+
+def ai_available(settings) -> bool:
+    if settings is None:
+        return False
+    if settings["provider"] == "ollama":
+        return True
+    return bool(resolve_key(settings))

@@ -77,6 +77,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from .routers import ask as ask_router
 app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(items.router)
@@ -87,6 +88,7 @@ app.include_router(tags.router)
 app.include_router(settings.router)
 app.include_router(tokens.router)
 app.include_router(export.router)
+app.include_router(ask_router.router)
 
 
 @app.get("/health")
