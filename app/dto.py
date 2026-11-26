@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from .config import cfg
@@ -51,6 +52,16 @@ def tag_dto(row) -> dict:
     return {"id": str(row["id"]), "name": row["name"], "origin": row["origin"]}
 
 
+def _as_obj(v):
+    """jsonb может прийти строкой — нормализуем в dict."""
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return {}
+    return v if isinstance(v, dict) else {}
+
+
 def item_dto(row, user_tags: list[str], collection_ids: list[str], steps: list, base: str) -> dict:
     original: dict = {}
     if row["file_path"]:
@@ -62,7 +73,7 @@ def item_dto(row, user_tags: list[str], collection_ids: list[str], steps: list, 
         }
     elif row["original_text"] is not None:
         original["text"] = row["original_text"]
-    video_meta = row.get("video_meta")
+    video_meta = _as_obj(row.get("video_meta"))
     video = None
     if video_meta:
         video = _clean(
@@ -76,7 +87,7 @@ def item_dto(row, user_tags: list[str], collection_ids: list[str], steps: list, 
             }
         )
     stage = row.get("extract_stage")
-    progress = row.get("extract_progress") or {}
+    progress = _as_obj(row.get("extract_progress")) or {}
     video_progress = (
         _clean({"stage": stage, "current": progress.get("current"),
                 "total": progress.get("total"), "percent": progress.get("percent")})

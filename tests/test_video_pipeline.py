@@ -84,3 +84,14 @@ def test_flag_off_is_noop(tmp_path, monkeypatch):
     conn = Conn()
     assert asyncio.run(P.video_branch(conn, _row(), "https://vk.com/video-1_2")) is None
     assert conn.sql == []
+
+
+def test_jsonb_params_are_native(tmp_path, monkeypatch):
+    """asyncpg сам кодирует jsonb: повторный json.dumps даёт строку вместо массива."""
+    conn, res = _run(monkeypatch, Prov([SubtitleTrack("ru", False, "vtt")]), tmp_path)
+    assert res is not None
+    for q, args in conn.sql:
+        if "video_transcripts" in q and "INSERT" in q:
+            assert isinstance(args[4], list), "segments должен быть списком, не строкой"
+        if "extract_progress" in q and args[2] is not None:
+            assert isinstance(args[2], dict), "progress должен быть dict, не строкой"

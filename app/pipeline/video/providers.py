@@ -102,7 +102,7 @@ class YtdlpProvider:
 
     async def fetch_audio(self, url: str, dest_dir: Path) -> Path:
         argv = self._base() + [
-            "-f", "bestaudio",
+            "-f", "bestaudio/best",
             "-x", "--audio-format", "wav", "--audio-quality", "0",
             "--postprocessor-args", "ffmpeg:-ar 16000 -ac 1",
             "-o", str(dest_dir / "audio.%(ext)s"), url,

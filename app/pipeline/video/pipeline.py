@@ -36,7 +36,7 @@ async def _stage(conn, item_id, stage, current=None, total=None):
     await conn.execute(
         "UPDATE items SET extract_stage = $2, extract_progress = $3::jsonb, "
         "updated_at = now() WHERE id = $1",
-        item_id, stage, json.dumps(progress) if progress else None,
+        item_id, stage, progress,
     )
 
 
@@ -57,7 +57,7 @@ async def _save(conn, item_id, user_id, *, source, language, segments, text,
         "source=EXCLUDED.source, language=EXCLUDED.language, segments=EXCLUDED.segments, "
         "text=EXCLUDED.text, model=EXCLUDED.model, duration_sec=EXCLUDED.duration_sec, "
         "status=EXCLUDED.status, updated_at=now()",
-        item_id, user_id, source, language, json.dumps(segments), text,
+        item_id, user_id, source, language, segments, text,
         model, duration_sec, status, chunk_no,
     )
 
@@ -125,9 +125,9 @@ async def _transcribe(conn, row, url, vurl, settings):
         await conn.execute(
             "UPDATE items SET video_meta = $2::jsonb WHERE id = $1",
             item_id,
-            json.dumps({"platform": vurl.platform, "video_id": vurl.video_id,
+            {"platform": vurl.platform, "video_id": vurl.video_id,
                         "title": meta.title, "channel": meta.channel,
-                        "duration_sec": meta.duration_sec, "source_url": url}),
+                        "duration_sec": meta.duration_sec, "source_url": url},
         )
         if meta.title and not (row["title"] or "").strip():
             await conn.execute("UPDATE items SET title = $2 WHERE id = $1", item_id, meta.title[:300])
@@ -189,6 +189,7 @@ async def _transcribe(conn, row, url, vurl, settings):
 
         text = _join(all_segs)
         if not text:
+            await conn.execute("DELETE FROM video_transcripts WHERE item_id = $1", item_id)
             raise VideoError("no_speech", "empty transcript")
         await _stage(conn, item_id, "done", len(pieces), len(pieces))
         return text, lang, meta.title
@@ -217,9 +218,8 @@ async def video_branch(conn, row, url):
             try:
                 return await _transcribe(conn, row, url, vurl, settings)
             except VideoError as e:
-                logger.info("video %s failed: %s", item_id, e.code)
+                logger.info("video %s failed: %s: %s", item_id, e.code, str(e)[:300])
                 await _error(conn, item_id, e.code)
-                await _stage(conn, item_id, None)
                 return None
             except Exception:
                 logger.warning("video %s unexpected failure", item_id, exc_info=True)

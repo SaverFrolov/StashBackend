@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import json
 import re
 import shutil
 
@@ -494,7 +495,9 @@ async def get_transcript(
         raise HTTPException(404, "Transcript not available")
     if not rows:
         raise HTTPException(404, "Transcript not found")
-    segments = [s for r in rows for s in r["segments"]]
+    segments = [s for r in rows
+                for s in (json.loads(r["segments"]) if isinstance(r["segments"], str)
+                          else r["segments"])]
     return {
         "source": rows[0]["source"],
         "language": rows[0]["language"],
