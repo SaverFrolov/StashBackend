@@ -70,7 +70,6 @@ def _markdown(items: list[dict]) -> str:
     return "\n\n---\n\n".join(docs)
 
 
-@router.post("/export")
 async def _select_rows(conn, opts: ExportOptions):
     if opts.scope == "collection":
         if not opts.collectionId:
