@@ -111,13 +111,19 @@ async def _transcribe(path: Path) -> tuple[str, str | None]:
     return text, data.get("language")
 
 
-async def extract_item(row) -> tuple[str, str | None, str | None] | None:
+async def extract_item(row, conn=None) -> tuple[str, str | None, str | None] | None:
     """Returns (text, lang, new_title) or None when extraction is not applicable."""
     type_ = row["type"]
     if type_ == "text":
         return None
     if type_ == "link":
-        return await extract_link(row["source"]["url"])
+        url = row["source"]["url"]
+        if conn is not None:
+            from .video.pipeline import video_branch
+            result = await video_branch(conn, row, url)
+            if result is not None:
+                return result
+        return await extract_link(url)
     path = Path(row["file_path"])
     if type_ == "pdf":
         return await asyncio.to_thread(_pdf_text, path), None, None

@@ -127,7 +127,7 @@ async def process_job(item_id: UUID, user_id: UUID, steps: tuple) -> None:
             )
             await _step(conn, item_id, "extract", "running", started=True)
             try:
-                result = await extract_item(row)
+                result = await extract_item(row, conn)
                 if result is not None and not result[0].strip():
                     raise RuntimeError("No text could be extracted")
             except Exception as e:
