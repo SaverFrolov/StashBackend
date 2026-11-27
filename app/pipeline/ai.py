@@ -1,4 +1,7 @@
+import asyncio
 import json
+import os
+import random
 import re
 
 import httpx
@@ -42,14 +45,42 @@ def chunk_text(text: str, size: int = 1500, overlap: int = 200) -> list[str]:
     return chunks
 
 
+EMBED_TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "60"))
+CHAT_TIMEOUT = float(os.getenv("CHAT_TIMEOUT", "90"))
+AI_RETRIES = int(os.getenv("AI_RETRIES", "3"))
+_TRANSIENT_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _is_transient(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _TRANSIENT_CODES
+    return False
+
+
+async def _with_retry(fn, *, attempts: int = AI_RETRIES, base: float = 1.5):
+    """Повторяет только временные сбои: таймаут, сеть, 429/5xx."""
+    for i in range(max(1, attempts)):
+        try:
+            return await fn()
+        except Exception as exc:
+            if not _is_transient(exc) or i >= attempts - 1:
+                raise
+            await asyncio.sleep(base * (2 ** i) + random.uniform(0, 0.5))
+
+
 async def embed_texts(texts: list[str]) -> list[list[float]]:
-    async with httpx.AsyncClient(timeout=300) as client:
-        r = await client.post(
-            f"{cfg.ollama_url}/api/embed",
-            json={"model": cfg.embed_model, "input": texts},
-        )
-        r.raise_for_status()
-        return r.json()["embeddings"]
+    async def once():
+        async with httpx.AsyncClient(timeout=EMBED_TIMEOUT) as client:
+            r = await client.post(
+                f"{cfg.ollama_url}/api/embed",
+                json={"model": cfg.embed_model, "input": texts},
+            )
+            r.raise_for_status()
+            return r.json()["embeddings"]
+
+    return await _with_retry(once)
 
 
 def _chat_url(provider: str, base_url: str) -> str:
@@ -78,14 +109,17 @@ async def annotate(settings, text: str, key: str | None = None) -> dict:
         "response_format": {"type": "json_object"},
         "temperature": 0.2,
     }
-    async with httpx.AsyncClient(timeout=300) as client:
-        r = await client.post(
-            _chat_url(settings["provider"], settings["base_url"]),
-            json=payload,
-            headers=headers,
-        )
-        r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"]
+    async def once():
+        async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as client:
+            r = await client.post(
+                _chat_url(settings["provider"], settings["base_url"]),
+                json=payload,
+                headers=headers,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+
+    content = await _with_retry(once)
     content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
     data = json.loads(content)
     annotation = str(data.get("annotation", "")).strip()

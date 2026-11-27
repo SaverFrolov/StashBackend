@@ -99,10 +99,12 @@ async def _vector(conn, q: str, filter_sql: str, params: list) -> list:
     return await conn.fetch(
         f"SELECT i.*, t.dist, t.content AS snippet FROM ("
         f"SELECT DISTINCT ON (item_id) item_id, dist, content FROM ("
-        f"SELECT item_id, content, embedding <=> {ph}::vector AS dist "
-        f"FROM item_chunks ORDER BY embedding <=> {ph}::vector LIMIT 200"
-        f") c ORDER BY item_id, dist) t JOIN items i ON i.id = t.item_id"
-        f"{filter_sql} ORDER BY t.dist LIMIT {LIMIT}",
+        f"SELECT ch.item_id, ch.content, ch.embedding <=> {ph}::vector AS dist "
+        f"FROM item_chunks ch JOIN items i ON i.id = ch.item_id"
+        f"{filter_sql} "
+        f"ORDER BY ch.embedding <=> {ph}::vector LIMIT 800"
+        f") c ORDER BY item_id, dist) t JOIN items i ON i.id = t.item_id "
+        f"ORDER BY t.dist LIMIT {LIMIT}",
         *params,
         vec,
     )

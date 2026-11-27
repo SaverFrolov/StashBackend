@@ -30,11 +30,28 @@ async def _step(conn, item_id, name, status, *, error=None, started=False, finis
 
 async def _embed(conn, item_id, user_id, text: str) -> None:
     chunks = ai.chunk_text(text)
-    await conn.execute("DELETE FROM item_chunks WHERE item_id = $1", item_id)
     if not chunks:
+        await conn.execute("DELETE FROM item_chunks WHERE item_id = $1", item_id)
         return
+
+    existing = {
+        r["chunk_no"]: r["content"]
+        for r in await conn.fetch(
+            "SELECT chunk_no, content FROM item_chunks "
+            "WHERE item_id = $1 AND embedding IS NOT NULL",
+            item_id,
+        )
+    }
+    await conn.execute(
+        "DELETE FROM item_chunks WHERE item_id = $1 AND chunk_no >= $2",
+        item_id, len(chunks),
+    )
+    todo = [i for i, c in enumerate(chunks) if existing.get(i) != c]
+    if not todo:
+        return  # текст не изменился — эмбеддинги остаются как есть
+
     try:
-        vecs = await ai.embed_texts(chunks)
+        vecs = await ai.embed_texts([chunks[i] for i in todo])
     except Exception:
         # Extraction stays ok; only semantic search degrades for this item.
         logger.warning("Embedding failed for item %s", item_id, exc_info=True)
@@ -42,11 +59,10 @@ async def _embed(conn, item_id, user_id, text: str) -> None:
     try:
         await conn.executemany(
             "INSERT INTO item_chunks (item_id, user_id, chunk_no, content, embedding) "
-            "VALUES ($1, $2, $3, $4, $5::vector)",
-            [
-                (item_id, user_id, i, c, str(v))
-                for i, (c, v) in enumerate(zip(chunks, vecs))
-            ],
+            "VALUES ($1, $2, $3, $4, $5::vector) "
+            "ON CONFLICT (item_id, chunk_no) DO UPDATE "
+            "SET content = EXCLUDED.content, embedding = EXCLUDED.embedding",
+            [(item_id, user_id, i, chunks[i], str(v)) for i, v in zip(todo, vecs)],
         )
     except asyncpg.ForeignKeyViolationError:
         pass  # item deleted while embedding

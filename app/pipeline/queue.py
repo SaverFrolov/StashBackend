@@ -18,6 +18,7 @@ HEAVY = "heavy"
 
 _queues: dict[str, asyncio.Queue] = {LIGHT: asyncio.Queue(), HEAVY: asyncio.Queue()}
 _running: dict[str, set] = {LIGHT: set(), HEAVY: set()}
+_pending: dict[str, set] = {LIGHT: set(), HEAVY: set()}
 
 HEAVY_TYPES = {"video", "audio"}
 HEAVY_BYTES = int(os.getenv("HEAVY_FILE_BYTES", str(5 * 1024 * 1024)))
@@ -63,6 +64,12 @@ def classify_row(row) -> str:
 
 def enqueue(item_id: UUID, user_id: UUID, steps=("extract", "annotate"), lane: str = LIGHT) -> None:
     lane = HEAVY if lane == HEAVY else LIGHT
+    key = str(item_id)
+    for other in (LIGHT, HEAVY):
+        if key in _running[other] or key in _pending[other]:
+            logger.info("skip duplicate %s (already in %s)", item_id, other)
+            return
+    _pending[lane].add(key)
     _queues[lane].put_nowait((item_id, user_id, tuple(steps)))
     logger.info("queued %s → %s (depth %d)", item_id, lane, _queues[lane].qsize())
 
@@ -88,6 +95,7 @@ async def _worker(lane: str) -> None:
     q = _queues[lane]
     while True:
         item_id, user_id, steps = await q.get()
+        _pending[lane].discard(str(item_id))
         _running[lane].add(str(item_id))
         try:
             await process_job(item_id, user_id, steps)
