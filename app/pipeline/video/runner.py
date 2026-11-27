@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import signal
 from dataclasses import dataclass
 
@@ -15,6 +16,25 @@ class ProcResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+def _lowprio(argv):
+    """Дети видео-конвейера уступают CPU и диск лёгкому лейну.
+
+    nice/ionice/taskset exec-аются в цель, поэтому PID и группа процессов
+    не меняются — таймауты и отмена продолжают работать как раньше.
+    """
+    prefix = []
+    nice = os.getenv("VIDEO_CHILD_NICE", "19")
+    if nice and shutil.which("nice"):
+        prefix += ["nice", "-n", str(nice)]
+    ionice = os.getenv("VIDEO_CHILD_IONICE", "3")
+    if ionice and shutil.which("ionice"):
+        prefix += ["ionice", "-c", str(ionice)]
+    cpus = os.getenv("VIDEO_CHILD_CPUS", "").strip()
+    if cpus and shutil.which("taskset"):
+        prefix += ["taskset", "-c", cpus]
+    return prefix + list(argv)
 
 
 def _clean_env() -> dict:
@@ -35,6 +55,7 @@ async def run_tool(
         if nice:
             os.nice(nice)
 
+    argv = _lowprio(argv)
     proc = await asyncio.create_subprocess_exec(
         *argv,
         stdout=asyncio.subprocess.PIPE,
