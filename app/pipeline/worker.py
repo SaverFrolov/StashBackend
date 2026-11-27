@@ -7,7 +7,7 @@ from ..config import cfg
 from ..db import app_conn, pools
 from . import ai
 from .extract import extract_item
-from .queue import enqueue
+from .queue import enqueue_auto
 
 logger = logging.getLogger("stash.pipeline")
 
@@ -190,7 +190,7 @@ async def recover() -> None:
                     r["id"],
                 )
                 steps = ("annotate",) if st in ("ok", "skipped") else ("extract", "annotate")
-                enqueue(r["id"], user["id"], steps)
+                await enqueue_auto(r["id"], user["id"], steps)
                 count += 1
     if count:
         logger.info("Recovered %s interrupted processing jobs", count)

@@ -169,7 +169,7 @@ async def _start_processing(conn, user_id, item_id, steps=("extract", "annotate"
             user_id,
             name,
         )
-    queue.enqueue(item_id, user_id, steps)
+    await queue.enqueue_auto(item_id, user_id, steps)
 
 
 async def _auto_process(conn, user_id, item_id):
