@@ -71,7 +71,7 @@ async def _annotate(conn, item_id, user_id, text: str) -> None:
                 item_id,
             )
             return
-        key_override = cfg.default_ai_key
+        key_override = ai.resolve_key(settings)
     if settings is None:
         await _step(conn, item_id, "annotate", "skipped", finished=True)
         await conn.execute(
